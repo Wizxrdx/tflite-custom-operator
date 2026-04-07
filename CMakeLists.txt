@@ -65,11 +65,13 @@ endif()
 
 file(WRITE "${TFLITE_REGISTER_CC}" "${TFLITE_REGISTER_CONTENT}")
 
+set(CUSTOM_OPS_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
 target_sources(tensorflow-lite PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/grid_sample.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/grid_sample.h
+  ${CUSTOM_OPS_SRC_DIR}/grid_sample.cc
+  ${CUSTOM_OPS_SRC_DIR}/grid_sample.h
 )
-target_include_directories(tensorflow-lite PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(tensorflow-lite PRIVATE ${CUSTOM_OPS_SRC_DIR})
 
 if(WIN32)
   set_target_properties(tensorflow-lite PROPERTIES OUTPUT_NAME "tensorflowlite")

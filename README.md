@@ -19,6 +19,93 @@ custom-op plugin DLL in this flow.
 - No standalone plugin build (`grid_sample_op.dll`).
 - No runtime `AddCustomOp` registration from an external DLL.
 
+## Step-by-Step: Register a Custom Op (GridSample Example)
+
+This repository uses **compile-time registration**: the custom op is built into
+the TFLite runtime and added to the default resolver.
+
+1. **Define an exported registration function**
+
+  In `custom_ops/grid_sample.h`, expose the op registration entrypoint:
+
+  ```cpp
+  GRID_SAMPLE_EXPORT TfLiteRegistration* Register_GRID_SAMPLE();
+  ```
+
+2. **Implement the kernel and registration object**
+
+  In `custom_ops/grid_sample.cc`:
+
+  - Implement `Init`, `Free`, `Prepare`, and `Invoke`.
+  - Return a static `TfLiteRegistration` from `Register_GRID_SAMPLE()`.
+  - Set `custom_name` to the exact op name in the `.tflite` model.
+
+  ```cpp
+  extern "C" {
+  GRID_SAMPLE_EXPORT TfLiteRegistration* Register_GRID_SAMPLE() {
+    static TfLiteRegistration reg = {
+      tflite::ops::custom::grid_sample::Init,
+      tflite::ops::custom::grid_sample::Free,
+      tflite::ops::custom::grid_sample::Prepare,
+      tflite::ops::custom::grid_sample::Invoke,
+    };
+    reg.custom_name = "TFLiteGridSample";
+    reg.version = 1;
+    return &reg;
+  }
+  }
+  ```
+
+3. **Compile the custom op into TensorFlow Lite**
+
+  In `custom_ops/CMakeLists.txt`, add the op sources to `tensorflow-lite`:
+
+  ```cmake
+  target_sources(tensorflow-lite PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/grid_sample.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/grid_sample.h
+  )
+  target_include_directories(tensorflow-lite PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  ```
+
+4. **Register the op in the default resolver**
+
+  This flow patches upstream `tensorflow/lite/core/kernels/register.cc` during
+  configure to inject:
+
+  ```cpp
+  TfLiteRegistration* Register_GRID_SAMPLE();
+  AddCustom("TFLiteGridSample", tflite::ops::custom::Register_GRID_SAMPLE());
+  ```
+
+  After this, interpreters that use `BuiltinOpResolver` can resolve
+  `TFLiteGridSample` without loading a separate plugin DLL.
+
+5. **Build the runtime DLL**
+
+  From repo root:
+
+  ```powershell
+  Remove-Item custom_ops/build -Recurse -Force -ErrorAction Ignore
+  cmake -S custom_ops -B custom_ops/build -G "Visual Studio 17 2022" -A x64
+  cmake --build custom_ops/build --config Release
+  ```
+
+6. **Validate with the sample notebook**
+
+  Run `custom_ops/examples/test_dll.ipynb` (Cells 1-6). Success indicates the
+  runtime resolved `TFLiteGridSample` via default resolver registration.
+
+### Important Naming Rule
+
+- The string in registration must match exactly across all points:
+  - Model custom op code: `"TFLiteGridSample"`
+  - Resolver registration: `AddCustom("TFLiteGridSample", ...)`
+  - Registration object: `reg.custom_name = "TFLiteGridSample"`
+
+If these differ, TFLite reports unresolved custom op errors at interpreter
+creation time.
+
 ## Build Requirements (Windows)
 
 - Visual Studio 2022 Build Tools (Desktop C++ workload)
